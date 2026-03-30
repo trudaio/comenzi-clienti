@@ -7,7 +7,7 @@ import { mappingRouter } from './routes/mapping.routes.js';
 import { statusRouter } from './routes/status.routes.js';
 import { SERVER_PORT } from '../shared/constants.js';
 import { readSites } from './utils/config-loader.js';
-import { syncSiteHourly, syncSiteStatusOnly } from './services/sync.service.js';
+import { syncSite, syncSiteHourly, syncSiteStatusOnly } from './services/sync.service.js';
 
 const app = express();
 const port = process.env['PORT'] ? parseInt(process.env['PORT'], 10) : SERVER_PORT;
@@ -49,8 +49,28 @@ cron.schedule('0 * * * *', async () => {
   }
 });
 
-// Daily status update at 5:00 AM: only refresh order_status for existing rows
-cron.schedule('0 5 * * *', async () => {
+// Daily full sync at 6:00 AM: pull last 30 days for all enabled sites (MERGE into BigQuery)
+cron.schedule('0 6 * * *', async () => {
+  console.log('[CRON] Daily full sync starting…');
+  try {
+    const sites = await readSites();
+    const enabled = sites.filter((s) => s.enabled);
+    for (const site of enabled) {
+      try {
+        const result = await syncSite(site.id);
+        console.log(`[CRON] ${site.id}: ${result.status} (${result.rowCount} rows)`);
+      } catch (err) {
+        console.error(`[CRON] Full sync error for ${site.id}:`, err);
+      }
+    }
+    console.log(`[CRON] Daily full sync done (${enabled.length} sites)`);
+  } catch (err) {
+    console.error('[CRON] Daily full sync failed:', err);
+  }
+});
+
+// Daily status update at 18:00 (6 PM): refresh order_status for existing rows
+cron.schedule('0 18 * * *', async () => {
   console.log('[CRON] Daily status update starting…');
   try {
     const sites = await readSites();
@@ -73,7 +93,8 @@ cron.schedule('0 5 * * *', async () => {
 app.listen(port, () => {
   console.log(`Clientorders server running on http://localhost:${port}`);
   console.log('[CRON] Hourly sync scheduled (every hour at :00)');
-  console.log('[CRON] Daily status update scheduled (daily at 05:00)');
+  console.log('[CRON] Daily full sync scheduled (daily at 06:00)');
+  console.log('[CRON] Daily status update scheduled (daily at 18:00)');
 });
 
 export default app;

@@ -5,6 +5,7 @@
 - [ ] diogentex.ro — API key 401 (unauthorized), de verificat cu clientul
 
 ## De facut in viitor
+- [ ] Creare addon Shopify (Custom App) pentru a putea trage comenzi din Shopify stores
 - [ ] Shopify connector implementation (codul efectiv, nu doar docs)
 - [ ] Firebase Hosting deployment
 - [ ] Autentificare UI (Firebase Auth)
