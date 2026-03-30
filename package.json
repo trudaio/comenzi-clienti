@@ -1,0 +1,37 @@
+{
+  "name": "clientsorders",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"tsx watch src/server/index.ts\"",
+    "build": "tsc --noEmit && vite build",
+    "tsc": "tsc --noEmit",
+    "sync": "tsx src/server/cli/sync-all.ts",
+    "sync:site": "tsx src/server/cli/sync-site.ts"
+  },
+  "dependencies": {
+    "@google-cloud/bigquery": "^7.9.1",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "node-cron": "^3.0.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^6.28.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.10",
+    "@types/node-cron": "^3.0.11",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.2",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3",
+    "vite": "^6.2.2"
+  }
+}

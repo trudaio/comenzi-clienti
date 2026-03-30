@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment
+.env.local
+.env.*.local
+
+# Secrets — NEVER commit these
+config/sites.json
+config/bigquery-service-account.json
+config/sync-history.json
+bq-all-project-*.json
+
+# Editor
+.DS_Store
+*.local
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*

@@ -1,0 +1,79 @@
+import express from 'express';
+import cors from 'cors';
+import cron from 'node-cron';
+import { sitesRouter } from './routes/sites.routes.js';
+import { syncRouter } from './routes/sync.routes.js';
+import { mappingRouter } from './routes/mapping.routes.js';
+import { statusRouter } from './routes/status.routes.js';
+import { SERVER_PORT } from '../shared/constants.js';
+import { readSites } from './utils/config-loader.js';
+import { syncSiteHourly, syncSiteStatusOnly } from './services/sync.service.js';
+
+const app = express();
+const port = process.env['PORT'] ? parseInt(process.env['PORT'], 10) : SERVER_PORT;
+
+app.use(cors());
+app.use(express.json());
+
+// ─── Routes ───────────────────────────────────────────────────────────────────
+
+app.use('/api/sites', sitesRouter);
+app.use('/api/sync', syncRouter);
+app.use('/api/mapping', mappingRouter);
+app.use('/api/status', statusRouter);
+
+// ─── Health Check ─────────────────────────────────────────────────────────────
+
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ─── Cron Scheduler ──────────────────────────────────────────────────────────
+
+// Hourly sync: fetch today's orders for sites with hourlySyncEnabled
+cron.schedule('0 * * * *', async () => {
+  console.log('[CRON] Hourly sync starting…');
+  try {
+    const sites = await readSites();
+    const hourly = sites.filter((s) => s.enabled && s.hourlySyncEnabled);
+    for (const site of hourly) {
+      try {
+        await syncSiteHourly(site.id);
+      } catch (err) {
+        console.error(`[CRON] Hourly sync error for ${site.id}:`, err);
+      }
+    }
+    console.log(`[CRON] Hourly sync done (${hourly.length} sites)`);
+  } catch (err) {
+    console.error('[CRON] Hourly sync failed:', err);
+  }
+});
+
+// Daily status update at 5:00 AM: only refresh order_status for existing rows
+cron.schedule('0 5 * * *', async () => {
+  console.log('[CRON] Daily status update starting…');
+  try {
+    const sites = await readSites();
+    const enabled = sites.filter((s) => s.enabled);
+    for (const site of enabled) {
+      try {
+        await syncSiteStatusOnly(site.id);
+      } catch (err) {
+        console.error(`[CRON] Status update error for ${site.id}:`, err);
+      }
+    }
+    console.log(`[CRON] Daily status update done (${enabled.length} sites)`);
+  } catch (err) {
+    console.error('[CRON] Daily status update failed:', err);
+  }
+});
+
+// ─── Start ────────────────────────────────────────────────────────────────────
+
+app.listen(port, () => {
+  console.log(`Clientorders server running on http://localhost:${port}`);
+  console.log('[CRON] Hourly sync scheduled (every hour at :00)');
+  console.log('[CRON] Daily status update scheduled (daily at 05:00)');
+});
+
+export default app;
