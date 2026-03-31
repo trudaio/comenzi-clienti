@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.firebase
+.firebaserc
+firebase.json
+docs
+README.md
+TODO.md
+CLAUDE.md
+PROJECT.md

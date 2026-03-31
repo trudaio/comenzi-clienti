@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import type { IColumnMapping, IStatusMapping, MappingStatus } from '@shared/types.js';
 import { STANDARD_COLUMNS, STANDARD_ORDER_STATUSES } from '@shared/constants.js';
+import { API_BASE } from '../services/api.service.js';
 
 const STATUS_LABELS: Record<MappingStatus, string> = {
   confirmed: '✓ mapped',
@@ -36,6 +37,35 @@ function formatSampleValue(val: unknown): string {
   return str.length > 60 ? str.slice(0, 57) + '…' : str;
 }
 
+// ─── Toast Component ────────────────────────────────────────────────────────
+
+interface Toast {
+  id: number;
+  message: string;
+  type: 'success' | 'error';
+}
+
+function ToastContainer({ toasts }: { toasts: Toast[] }) {
+  return (
+    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className={`px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-fade-in ${
+            t.type === 'success'
+              ? 'bg-green-600 text-white'
+              : 'bg-red-600 text-white'
+          }`}
+        >
+          {t.type === 'success' ? '✓' : '✗'} {t.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Main Component ─────────────────────────────────────────────────────────
+
 export default function ColumnMappingPage() {
   const { id } = useParams<{ id: string }>();
   const [mapping, setMapping] = useState<IColumnMapping[]>([]);
@@ -45,12 +75,22 @@ export default function ColumnMappingPage() {
   const [saving, setSaving] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
   const [detectingStatus, setDetectingStatus] = useState(false);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  let toastId = 0;
+  function showToast(message: string, type: 'success' | 'error') {
+    const id = ++toastId;
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3000);
+  }
 
   useEffect(() => {
     if (!id) return;
     Promise.all([
-      fetch(`/api/mapping/${id}`).then((r) => r.json()) as Promise<{ columnMapping: IColumnMapping[] }>,
-      fetch(`/api/mapping/status/${id}`).then((r) => r.json()) as Promise<{ statusMapping: IStatusMapping[] }>,
+      fetch(`${API_BASE}/api/mapping/${id}`).then((r) => r.json()) as Promise<{ columnMapping: IColumnMapping[] }>,
+      fetch(`${API_BASE}/api/mapping/status/${id}`).then((r) => r.json()) as Promise<{ statusMapping: IStatusMapping[] }>,
     ])
       .then(([colData, statusData]) => {
         setMapping(colData.columnMapping);
@@ -70,11 +110,18 @@ export default function ColumnMappingPage() {
     if (!id) return;
     setSaving(true);
     try {
-      await fetch(`/api/mapping/${id}`, {
+      const res = await fetch(`${API_BASE}/api/mapping/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ columnMapping: mapping }),
       });
+      if (res.ok) {
+        showToast(`Column mapping saved (${mapping.length} columns)`, 'success');
+      } else {
+        showToast('Failed to save column mapping', 'error');
+      }
+    } catch {
+      showToast('Network error — could not save', 'error');
     } finally {
       setSaving(false);
     }
@@ -84,11 +131,18 @@ export default function ColumnMappingPage() {
     if (!id) return;
     setSavingStatus(true);
     try {
-      await fetch(`/api/mapping/status/${id}`, {
+      const res = await fetch(`${API_BASE}/api/mapping/status/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statusMapping }),
       });
+      if (res.ok) {
+        showToast(`Status mapping saved (${statusMapping.length} statuses)`, 'success');
+      } else {
+        showToast('Failed to save status mapping', 'error');
+      }
+    } catch {
+      showToast('Network error — could not save', 'error');
     } finally {
       setSavingStatus(false);
     }
@@ -98,9 +152,16 @@ export default function ColumnMappingPage() {
     if (!id) return;
     setDetectingStatus(true);
     try {
-      const res = await fetch(`/api/mapping/status/${id}/detect`, { method: 'POST' });
-      const data = (await res.json()) as { detectedStatuses: IStatusMapping[] };
-      setStatusMapping(data.detectedStatuses);
+      const res = await fetch(`${API_BASE}/api/mapping/status/${id}/detect`, { method: 'POST' });
+      if (res.ok) {
+        const data = (await res.json()) as { detectedStatuses: IStatusMapping[] };
+        setStatusMapping(data.detectedStatuses);
+        showToast(`Detected ${data.detectedStatuses.length} statuses`, 'success');
+      } else {
+        showToast('Failed to detect statuses', 'error');
+      }
+    } catch {
+      showToast('Network error — could not detect statuses', 'error');
     } finally {
       setDetectingStatus(false);
     }
@@ -118,15 +179,22 @@ export default function ColumnMappingPage() {
     if (!id) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/mapping/${id}/detect`, { method: 'POST' });
-      const data = (await res.json()) as { detectedColumns: string[]; sample: Record<string, unknown> | null };
-      const autoMapped: IColumnMapping[] = data.detectedColumns.map((col) => ({
-        sourceColumn: col,
-        targetColumn: STANDARD_COLUMNS.find((s) => s === col) ?? '',
-        status: STANDARD_COLUMNS.find((s) => s === col) ? 'confirmed' : 'unmapped',
-      }));
-      setMapping(autoMapped);
-      setSampleData(data.sample ?? null);
+      const res = await fetch(`${API_BASE}/api/mapping/${id}/detect`, { method: 'POST' });
+      if (res.ok) {
+        const data = (await res.json()) as { detectedColumns: string[]; sample: Record<string, unknown> | null };
+        const autoMapped: IColumnMapping[] = data.detectedColumns.map((col) => ({
+          sourceColumn: col,
+          targetColumn: STANDARD_COLUMNS.find((s) => s === col) ?? '',
+          status: STANDARD_COLUMNS.find((s) => s === col) ? 'confirmed' : 'unmapped',
+        }));
+        setMapping(autoMapped);
+        setSampleData(data.sample ?? null);
+        showToast(`Detected ${data.detectedColumns.length} columns`, 'success');
+      } else {
+        showToast('Failed to detect columns', 'error');
+      }
+    } catch {
+      showToast('Network error — could not detect columns', 'error');
     } finally {
       setLoading(false);
     }
@@ -134,6 +202,8 @@ export default function ColumnMappingPage() {
 
   return (
     <div>
+      <ToastContainer toasts={toasts} />
+
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Column Mapping</h1>
         <div className="flex gap-3">

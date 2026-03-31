@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ISiteConfig, ISyncHistoryEntry } from '@shared/types.js';
-import { deleteSite, fetchSyncHistory } from '../services/api.service.js';
+import { API_BASE, deleteSite, fetchSyncHistory } from '../services/api.service.js';
 
 function formatSyncTime(iso?: string): string {
   if (!iso) return '';
@@ -33,7 +33,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
 
   const loadSites = () => {
-    fetch('/api/sites')
+    fetch(`${API_BASE}/api/sites`)
       .then((r) => r.json())
       .then((data: { sites: ISiteConfig[] }) => {
         setSites(data.sites);
@@ -49,7 +49,7 @@ export default function DashboardPage() {
   const handleSync = async (siteId: string) => {
     setSyncing((prev) => ({ ...prev, [siteId]: true }));
     try {
-      await fetch(`/api/sync/${siteId}`, { method: 'POST' });
+      await fetch(`${API_BASE}/api/sync/${siteId}`, { method: 'POST' });
       loadSites();
     } finally {
       setSyncing((prev) => ({ ...prev, [siteId]: false }));
@@ -85,7 +85,7 @@ export default function DashboardPage() {
             onClick={async () => {
               setSyncingAll(true);
               try {
-                await fetch('/api/sync/all', { method: 'POST' });
+                await fetch(`${API_BASE}/api/sync/all`, { method: 'POST' });
                 loadSites();
               } finally {
                 setSyncingAll(false);
@@ -118,11 +118,29 @@ export default function DashboardPage() {
         {sites.map((site) => (
           <div key={site.id} className="bg-gray-900 border border-gray-800 rounded-lg">
             <div className="px-5 py-4 flex items-center justify-between">
-              <div>
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium">{site.name}</span>
-                <span className="ml-3 text-xs text-gray-400 uppercase">{site.platform}</span>
+                <span className="text-xs text-gray-400 uppercase">{site.platform}</span>
+                {site.columnMapping && site.columnMapping.length > 0 ? (
+                  <span className="text-[10px] bg-green-900/50 text-green-400 px-1.5 py-0.5 rounded" title="Column mapping configured">
+                    Columns ✓
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-yellow-900/40 text-yellow-400 px-1.5 py-0.5 rounded" title="No column mapping">
+                    Columns ✗
+                  </span>
+                )}
+                {site.statusMapping && site.statusMapping.length > 0 ? (
+                  <span className="text-[10px] bg-green-900/50 text-green-400 px-1.5 py-0.5 rounded" title="Status mapping configured">
+                    Status ✓
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-yellow-900/40 text-yellow-400 px-1.5 py-0.5 rounded" title="No status mapping">
+                    Status ✗
+                  </span>
+                )}
                 {site.lastSyncAt && (
-                  <span className="ml-3 text-xs text-gray-500" title={site.lastSyncAt}>
+                  <span className="text-xs text-gray-500" title={site.lastSyncAt}>
                     Last sync: {formatSyncTime(site.lastSyncAt)}
                   </span>
                 )}

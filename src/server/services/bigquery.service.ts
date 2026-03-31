@@ -1,4 +1,5 @@
 import { BigQuery } from '@google-cloud/bigquery';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { IOrderRow } from '../../shared/types.js';
@@ -9,18 +10,22 @@ const BQ_PROJECT_ID = process.env['BQ_PROJECT_ID'] || 'bq-all-project';
 const BQ_DATASET_ID = process.env['BQ_DATASET_ID'] || 'comenzi_clienti_limitless';
 const BQ_SA_PATH = process.env['BQ_SERVICE_ACCOUNT_PATH'] || './config/bigquery-service-account.json';
 
-const keyFilename = path.isAbsolute(BQ_SA_PATH)
+// Resolve key file path — if the file doesn't exist, use ADC (Application Default Credentials)
+const resolvedKeyPath = path.isAbsolute(BQ_SA_PATH)
   ? BQ_SA_PATH
   : path.resolve(__dirname, '../../../', BQ_SA_PATH);
+const useKeyFile = fs.existsSync(resolvedKeyPath);
 
 let bqClient: BigQuery | null = null;
 
 function getClient(): BigQuery {
   if (!bqClient) {
-    bqClient = new BigQuery({
-      projectId: BQ_PROJECT_ID,
-      keyFilename,
-    });
+    if (useKeyFile) {
+      bqClient = new BigQuery({ projectId: BQ_PROJECT_ID, keyFilename: resolvedKeyPath });
+    } else {
+      // On Cloud Run / GCE, use Application Default Credentials automatically
+      bqClient = new BigQuery({ projectId: BQ_PROJECT_ID });
+    }
   }
   return bqClient;
 }
@@ -101,12 +106,19 @@ export async function mergeRows(tableName: string, rows: IOrderRow[]): Promise<v
     // 2. Wait for streaming buffer to be readable (BQ streaming inserts have a short delay)
     await new Promise((r) => setTimeout(r, 30_000));
 
-    // 3. Run MERGE
+    // 3. Run MERGE (deduplicate staging to avoid "must match at most one source row" error)
     const mergeQuery = `
       MERGE ${fqMain} AS target
-      USING ${fqStaging} AS source
+      USING (
+        SELECT * FROM ${fqStaging}
+        QUALIFY ROW_NUMBER() OVER (
+          PARTITION BY order_id, product_id, product_sku, source_site
+          ORDER BY synced_at DESC
+        ) = 1
+      ) AS source
       ON target.order_id = source.order_id
          AND target.product_id = source.product_id
+         AND target.product_sku = source.product_sku
          AND target.source_site = source.source_site
       WHEN MATCHED THEN UPDATE SET
         target.order_date = source.order_date,
@@ -163,9 +175,16 @@ export async function mergeStatusOnly(tableName: string, rows: IOrderRow[]): Pro
 
     const mergeQuery = `
       MERGE ${fqMain} AS target
-      USING ${fqStaging} AS source
+      USING (
+        SELECT * FROM ${fqStaging}
+        QUALIFY ROW_NUMBER() OVER (
+          PARTITION BY order_id, product_id, product_sku, source_site
+          ORDER BY synced_at DESC
+        ) = 1
+      ) AS source
       ON target.order_id = source.order_id
          AND target.product_id = source.product_id
+         AND target.product_sku = source.product_sku
          AND target.source_site = source.source_site
       WHEN MATCHED THEN UPDATE SET
         target.order_status = source.order_status,

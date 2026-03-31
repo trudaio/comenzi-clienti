@@ -8,11 +8,20 @@ import { statusRouter } from './routes/status.routes.js';
 import { SERVER_PORT } from '../shared/constants.js';
 import { readSites } from './utils/config-loader.js';
 import { syncSite, syncSiteHourly, syncSiteStatusOnly } from './services/sync.service.js';
+import { sendDailyReport } from './services/email.service.js';
 
 const app = express();
 const port = process.env['PORT'] ? parseInt(process.env['PORT'], 10) : SERVER_PORT;
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:5175',
+    'https://comenzi-clienti-limitless.web.app',
+    'https://comenzi-clienti-limitless.firebaseapp.com',
+  ],
+}));
 app.use(express.json());
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -88,6 +97,27 @@ cron.schedule('0 18 * * *', async () => {
   }
 });
 
+// Daily email report at 13:30 Romania time (10:30 UTC)
+cron.schedule('30 10 * * *', async () => {
+  console.log('[CRON] Sending daily email report…');
+  try {
+    await sendDailyReport();
+  } catch (err) {
+    console.error('[CRON] Email report failed:', err);
+  }
+});
+
+// Manual trigger: POST /api/report/email
+app.post('/api/report/email', async (_req, res) => {
+  try {
+    await sendDailyReport();
+    res.json({ status: 'sent' });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: msg });
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(port, () => {
@@ -95,6 +125,7 @@ app.listen(port, () => {
   console.log('[CRON] Hourly sync scheduled (every hour at :00)');
   console.log('[CRON] Daily full sync scheduled (daily at 06:00)');
   console.log('[CRON] Daily status update scheduled (daily at 18:00)');
+  console.log('[CRON] Daily email report scheduled (daily at 13:30 Romania)');
 });
 
 export default app;
