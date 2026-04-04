@@ -38,6 +38,7 @@ export interface ISiteConfig {
   bigqueryTable: string;
   columnMapping: IColumnMapping[];
   statusMapping: IStatusMapping[];
+  productFeedUrl?: string;
   syncSchedule: string;
   lookbackDays: number;
   hourlySyncEnabled?: boolean;

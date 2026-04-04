@@ -28,6 +28,7 @@ interface FormState {
   syncMinute: string;
   lookbackDays: number;
   hourlySyncEnabled: boolean;
+  productFeedUrl: string;
 }
 
 const defaultTime = parseCronTime(DEFAULT_SYNC_SCHEDULE);
@@ -42,6 +43,7 @@ const initialForm: FormState = {
   syncMinute: defaultTime.minute,
   lookbackDays: DEFAULT_LOOKBACK_DAYS,
   hourlySyncEnabled: false,
+  productFeedUrl: '',
 };
 
 export default function SiteConfigPage() {
@@ -69,6 +71,7 @@ export default function SiteConfigPage() {
           syncMinute: time.minute,
           lookbackDays: site.lookbackDays ?? DEFAULT_LOOKBACK_DAYS,
           hourlySyncEnabled: site.hourlySyncEnabled ?? false,
+          productFeedUrl: site.productFeedUrl ?? '',
         });
       })
       .catch(() => setLoadError('Failed to load site'));
@@ -86,6 +89,7 @@ export default function SiteConfigPage() {
         syncSchedule: buildCron(form.syncHour, form.syncMinute),
         lookbackDays: form.lookbackDays,
         hourlySyncEnabled: form.hourlySyncEnabled,
+        productFeedUrl: form.productFeedUrl || undefined,
         columnMapping: [],
         statusMapping: [],
         enabled: true,
@@ -159,6 +163,18 @@ export default function SiteConfigPage() {
             value={form.bigqueryTable}
             onChange={(e) => setForm((p) => ({ ...p, bigqueryTable: e.target.value }))}
             placeholder="orders_arlight_ro"
+            className="mt-1 block w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+          />
+        </label>
+
+        {/* Product Feed URL */}
+        <label className="block">
+          <span className="text-sm text-gray-400">Product Feed URL (optional)</span>
+          <input
+            type="url"
+            value={form.productFeedUrl}
+            onChange={(e) => setForm((p) => ({ ...p, productFeedUrl: e.target.value }))}
+            placeholder="https://example.com/feed/googleShoppingAds.xml"
             className="mt-1 block w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
           />
         </label>
