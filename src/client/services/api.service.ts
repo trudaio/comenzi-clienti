@@ -91,3 +91,23 @@ export async function fetchSyncHistory(
   const data = (await res.json()) as { history: ISyncHistoryEntry[] };
   return data.history;
 }
+
+// ─── Product Feed ───────────────────────────────────────────────────────────
+
+export async function fetchFeedInfo(siteId: string): Promise<{ loaded: boolean; productCount: number; hasFeed: boolean }> {
+  const res = await fetch(`${API_BASE}/api/feed/${siteId}`);
+  if (!res.ok) throw new Error(`GET /api/feed/${siteId} failed: ${res.status}`);
+  return res.json() as Promise<{ loaded: boolean; productCount: number; hasFeed: boolean }>;
+}
+
+export async function checkFeedProductId(siteId: string, productId: string): Promise<{ exists: boolean | null }> {
+  const res = await fetch(`${API_BASE}/api/feed/${siteId}/check/${encodeURIComponent(productId)}`);
+  if (!res.ok) throw new Error(`Feed check failed: ${res.status}`);
+  return res.json() as Promise<{ exists: boolean | null }>;
+}
+
+export async function reloadFeed(siteId: string): Promise<{ productCount: number }> {
+  const res = await fetch(`${API_BASE}/api/feed/${siteId}/reload`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Feed reload failed: ${res.status}`);
+  return res.json() as Promise<{ productCount: number }>;
+}
