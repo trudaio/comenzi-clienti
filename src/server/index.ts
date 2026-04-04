@@ -5,6 +5,7 @@ import { sitesRouter } from './routes/sites.routes.js';
 import { syncRouter } from './routes/sync.routes.js';
 import { mappingRouter } from './routes/mapping.routes.js';
 import { statusRouter } from './routes/status.routes.js';
+import { feedRouter } from './routes/feed.routes.js';
 import { SERVER_PORT } from '../shared/constants.js';
 import { readSites } from './utils/config-loader.js';
 import { syncSite, syncSiteHourly, syncSiteStatusOnly } from './services/sync.service.js';
@@ -30,6 +31,7 @@ app.use('/api/sites', sitesRouter);
 app.use('/api/sync', syncRouter);
 app.use('/api/mapping', mappingRouter);
 app.use('/api/status', statusRouter);
+app.use('/api/feed', feedRouter);
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 
