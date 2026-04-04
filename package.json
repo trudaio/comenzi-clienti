@@ -17,7 +17,8 @@
     "nodemailer": "^8.0.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^6.28.1"
+    "react-router-dom": "^6.28.1",
+    "sax": "^1.6.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -27,6 +28,7 @@
     "@types/nodemailer": "^7.0.11",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
+    "@types/sax": "^1.2.7",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.2",
