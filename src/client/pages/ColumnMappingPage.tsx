@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import type { IColumnMapping, IStatusMapping, MappingStatus } from '@shared/types.js';
 import { STANDARD_COLUMNS, STANDARD_ORDER_STATUSES } from '@shared/constants.js';
-import { API_BASE } from '../services/api.service.js';
+import { API_BASE, fetchFeedInfo, checkFeedProductId } from '../services/api.service.js';
 
 const STATUS_LABELS: Record<MappingStatus, string> = {
   confirmed: '✓ mapped',
@@ -86,6 +86,13 @@ export default function ColumnMappingPage() {
   const [savingStatus, setSavingStatus] = useState(false);
   const [detectingStatus, setDetectingStatus] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [feedLoaded, setFeedLoaded] = useState(false);
+  const [feedHasFeed, setFeedHasFeed] = useState(false);
+  const [feedProductCount, setFeedProductCount] = useState(0);
+  const [feedChecks, setFeedChecks] = useState<Record<string, boolean | null>>({});
+  const [searchId, setSearchId] = useState('');
+  const [searchResult, setSearchResult] = useState<{ id: string; exists: boolean | null } | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   let toastId = 0;
   function showToast(message: string, type: 'success' | 'error') {
@@ -109,6 +116,37 @@ export default function ColumnMappingPage() {
       })
       .catch(() => setLoading(false));
   }, [id]);
+
+  // Load feed info when site ID is available
+  useEffect(() => {
+    if (!id) return;
+    fetchFeedInfo(id)
+      .then((info) => {
+        setFeedHasFeed(info.hasFeed);
+        setFeedLoaded(info.loaded);
+        setFeedProductCount(info.productCount);
+      })
+      .catch(() => {
+        setFeedHasFeed(false);
+      });
+  }, [id]);
+
+  // When mapping or sample data changes, check product_id values against feed
+  useEffect(() => {
+    if (!id || !feedLoaded || !sampleData) return;
+    const productIdRows = mapping.filter((r) => r.targetColumn === 'product_id');
+    for (const row of productIdRows) {
+      const val = getNestedValue(sampleData, row.sourceColumn);
+      if (val !== undefined && val !== null) {
+        const productId = String(val);
+        checkFeedProductId(id, productId)
+          .then((res) => {
+            setFeedChecks((prev) => ({ ...prev, [row.sourceColumn]: res.exists }));
+          })
+          .catch(() => {});
+      }
+    }
+  }, [id, feedLoaded, mapping, sampleData]);
 
   function updateRow(index: number, field: keyof IColumnMapping, value: string) {
     setMapping((prev) =>
@@ -210,6 +248,19 @@ export default function ColumnMappingPage() {
     }
   }
 
+  async function handleFeedSearch() {
+    if (!id || !searchId.trim()) return;
+    setSearchLoading(true);
+    try {
+      const res = await checkFeedProductId(id, searchId.trim());
+      setSearchResult({ id: searchId.trim(), exists: res.exists });
+    } catch {
+      setSearchResult({ id: searchId.trim(), exists: null });
+    } finally {
+      setSearchLoading(false);
+    }
+  }
+
   return (
     <div>
       <ToastContainer toasts={toasts} />
@@ -254,7 +305,22 @@ export default function ColumnMappingPage() {
                   <td className="py-2 pr-4 text-gray-500">{i + 1}</td>
                   <td className="py-2 pr-4 font-mono text-xs">{row.sourceColumn}</td>
                   <td className="py-2 pr-4 text-xs text-gray-400 max-w-[200px] truncate" title={sampleData ? String(getNestedValue(sampleData, row.sourceColumn) ?? '') : ''}>
-                    {sampleData ? formatSampleValue(getNestedValue(sampleData, row.sourceColumn)) : '—'}
+                    <span>{sampleData ? formatSampleValue(getNestedValue(sampleData, row.sourceColumn)) : '—'}</span>
+                    {row.targetColumn === 'product_id' && feedHasFeed && sampleData && (
+                      <span className={`ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                        feedChecks[row.sourceColumn] === true
+                          ? 'bg-green-900/50 text-green-400'
+                          : feedChecks[row.sourceColumn] === false
+                            ? 'bg-red-900/50 text-red-400'
+                            : 'bg-gray-800 text-gray-500'
+                      }`}>
+                        {feedChecks[row.sourceColumn] === true
+                          ? 'in feed'
+                          : feedChecks[row.sourceColumn] === false
+                            ? 'not in feed'
+                            : '...'}
+                      </span>
+                    )}
                   </td>
                   <td className="py-2 pr-4">
                     <select
@@ -294,6 +360,48 @@ export default function ColumnMappingPage() {
             <p className="text-center py-10 text-gray-500">
               No columns detected yet. Click &quot;Auto-detect columns&quot; to start.
             </p>
+          )}
+        </div>
+      )}
+
+      {/* Feed Validation Section */}
+      {feedHasFeed && (
+        <div className="mt-6 p-4 border border-gray-800 rounded-lg">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-300">
+              Product Feed Validation
+              <span className="ml-2 text-xs font-normal text-gray-500">
+                {feedLoaded ? `${feedProductCount.toLocaleString()} products loaded` : 'Loading feed...'}
+              </span>
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={searchId}
+              onChange={(e) => setSearchId(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleFeedSearch(); }}
+              placeholder="Enter product ID to verify..."
+              className="flex-1 bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            />
+            <button
+              onClick={() => { void handleFeedSearch(); }}
+              disabled={searchLoading || !searchId.trim()}
+              className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white px-4 py-2 rounded text-sm"
+            >
+              {searchLoading ? '...' : 'Check'}
+            </button>
+          </div>
+          {searchResult && (
+            <div className={`mt-2 text-sm ${
+              searchResult.exists === true ? 'text-green-400' : searchResult.exists === false ? 'text-red-400' : 'text-gray-500'
+            }`}>
+              {searchResult.exists === true
+                ? `"${searchResult.id}" found in feed`
+                : searchResult.exists === false
+                  ? `"${searchResult.id}" NOT found in feed`
+                  : `Could not check "${searchResult.id}"`}
+            </div>
           )}
         </div>
       )}
