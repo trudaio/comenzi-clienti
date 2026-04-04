@@ -16,10 +16,20 @@ const STATUS_CLASSES: Record<MappingStatus, string> = {
   ignored: 'text-gray-500',
 };
 
-/** Resolve a dot-notation path like "invoice.date" from a nested object */
+/** Resolve a dot-notation path like "items.sku" from a nested object.
+ *  When a path segment hits an array, take the first element and continue. */
 function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce<unknown>((acc, key) => {
-    if (acc && typeof acc === 'object' && !Array.isArray(acc)) {
+    if (acc === undefined || acc === null) return undefined;
+    if (Array.isArray(acc)) {
+      // Take first element, then resolve key from it
+      const first = acc[0];
+      if (first && typeof first === 'object') {
+        return (first as Record<string, unknown>)[key];
+      }
+      return undefined;
+    }
+    if (typeof acc === 'object') {
       return (acc as Record<string, unknown>)[key];
     }
     return undefined;

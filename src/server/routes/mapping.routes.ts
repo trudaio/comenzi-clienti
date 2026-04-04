@@ -5,6 +5,7 @@ import { DEFAULT_STATUS_MAPPINGS } from '../../shared/constants.js';
 import { readSites, writeSites } from '../utils/config-loader.js';
 import { fetchSample } from '../services/sync.service.js';
 import { GomagConnector } from '../connectors/gomag.connector.js';
+import { saveMappings } from '../services/site-mappings.service.js';
 
 export const mappingRouter = Router();
 
@@ -28,8 +29,15 @@ mappingRouter.put('/:siteId', async (req: Request, res: Response) => {
     const site = sites.find((s) => s.id === req.params.siteId);
     if (!site) { res.status(404).json({ error: 'Site not found' }); return; }
 
-    site.columnMapping = req.body.columnMapping as IColumnMapping[];
-    await writeSites(sites);
+    const newColumnMapping = req.body.columnMapping as IColumnMapping[];
+    site.columnMapping = newColumnMapping;
+
+    // Persist to BigQuery (primary, survives redeploys) + sites.json (secondary, current session)
+    await Promise.all([
+      saveMappings(site.id, newColumnMapping, site.statusMapping ?? []),
+      writeSites(sites),
+    ]);
+
     res.json({ siteId: site.id, columnMapping: site.columnMapping });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -101,8 +109,15 @@ mappingRouter.put('/status/:siteId', async (req: Request, res: Response) => {
     const site = sites.find((s) => s.id === req.params.siteId);
     if (!site) { res.status(404).json({ error: 'Site not found' }); return; }
 
-    site.statusMapping = req.body.statusMapping as IStatusMapping[];
-    await writeSites(sites);
+    const newStatusMapping = req.body.statusMapping as IStatusMapping[];
+    site.statusMapping = newStatusMapping;
+
+    // Persist to BigQuery (primary, survives redeploys) + sites.json (secondary, current session)
+    await Promise.all([
+      saveMappings(site.id, site.columnMapping ?? [], newStatusMapping),
+      writeSites(sites),
+    ]);
+
     res.json({ siteId: site.id, statusMapping: site.statusMapping });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -183,14 +198,26 @@ function cleanGomagSample(raw: Record<string, unknown>): Record<string, unknown>
   return cleaned;
 }
 
-/** Recursively extract all keys from an object, flattened with dot notation */
+/** Recursively extract all keys from an object, flattened with dot notation.
+ *  Arrays are expanded by inspecting the first element. */
 function flattenKeys(obj: Record<string, unknown>, prefix = ''): string[] {
   const keys: string[] = [];
   for (const [key, val] of Object.entries(obj)) {
     const fullKey = prefix ? `${prefix}.${key}` : key;
-    keys.push(fullKey);
-    if (val && typeof val === 'object' && !Array.isArray(val)) {
+
+    if (Array.isArray(val)) {
+      // Expand array: take first element if it's an object
+      const first = val.find((item) => item && typeof item === 'object' && !Array.isArray(item));
+      if (first) {
+        keys.push(...flattenKeys(first as Record<string, unknown>, fullKey));
+      } else {
+        // Primitive array — keep as single key
+        keys.push(fullKey);
+      }
+    } else if (val && typeof val === 'object') {
       keys.push(...flattenKeys(val as Record<string, unknown>, fullKey));
+    } else {
+      keys.push(fullKey);
     }
   }
   return keys;
